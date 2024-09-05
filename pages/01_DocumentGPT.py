@@ -85,8 +85,27 @@ def format_docs(docs):
     return "\n\n".join(document.page_content for document in docs)
 
 
+
+st.title("DocumentGPT")
+
+
+st.markdown("""
+Welcome!
+
+Use this Chatbot to ask question about the document that you upload!
+First, Upload your files on the sidebar.
+""")
+
+
+with st.sidebar:
+    file = st.file_uploader("Upload a .txt, .pdf or .docx file", type=["pdf", "txt", "docx"])
+    st.markdown("## Please enter your OpenAI API Key")
+    openai_key = st.text_input("OpenAI API Key", type="password")
+
+
+
 ## Open AI llm settings
-llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.1, streaming=True, callbacks=[ChatCallbackHandler()])
+llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.1, streaming=True, callbacks=[ChatCallbackHandler()], api_key=openai_key)
 
 memory = ConversationBufferMemory(
     llm = llm,
@@ -114,21 +133,6 @@ prompt = ChatPromptTemplate.from_messages(
 
 def load_memory(_):
     return memory.load_memory_variables({})["history"]
-
-
-st.title("DocumentGPT")
-
-
-st.markdown("""
-Welcome!
-
-Use this Chatbot to ask question about the document that you upload!
-First, Upload your files on the sidebar.
-""")
-
-
-with st.sidebar:
-    file = st.file_uploader("Upload a .txt, .pdf or .docx file", type=["pdf", "txt", "docx"])
 
 
 if file:
