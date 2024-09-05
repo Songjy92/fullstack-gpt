@@ -1,6 +1,6 @@
 import streamlit as st
 import time
-
+import os
 from langchain.chat_models import ChatOpenAI
 from langchain.document_loaders import UnstructuredFileLoader
 from langchain.text_splitter import CharacterTextSplitter
@@ -34,13 +34,17 @@ class ChatCallbackHandler(BaseCallbackHandler):
 
 @st.cache_data(show_spinner="Embedding file...")
 def embed_file (file):
+    cache_dir
     file_content = file.read()
+    if not os.path.exists("./.cache/"):
+        os.makedirs("./.cache/")
+    else:
+        pass
     file_path = f"./.cache/files/{file.name}"
+    cache_dir = LocalFileStore(f"./.cache/embeddings/{file.name}")
     
     with open(file_path, "wb") as f:
         f.write(file_content)
-    
-    cache_dir = LocalFileStore(f"./.cache/embeddings/{file.name}")
 
     splitter = CharacterTextSplitter.from_tiktoken_encoder(
         separator="\n",
