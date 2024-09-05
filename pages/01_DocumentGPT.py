@@ -34,7 +34,6 @@ class ChatCallbackHandler(BaseCallbackHandler):
 
 @st.cache_data(show_spinner="Embedding file...")
 def embed_file (file):
-    cache_dir
     file_content = file.read()
     if not os.path.exists("./.cache/"):
         os.makedirs("./.cache/")
