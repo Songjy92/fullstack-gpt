@@ -56,7 +56,7 @@ def embed_file (file):
     )
     loader = UnstructuredFileLoader(file_path)
     docs = loader.load_and_split(text_splitter = splitter)
-    embeddings = OpenAIEmbeddings()
+    embeddings = OpenAIEmbeddings(openai_api_key=openai_key)
 
     #chaching embeddings
     cached_embeddings = CacheBackedEmbeddings.from_bytes_store(
