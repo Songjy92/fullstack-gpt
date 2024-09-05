@@ -102,34 +102,30 @@ with st.sidebar:
     st.markdown("## Please enter your OpenAI API Key")
     openai_key = st.text_input("OpenAI API Key", type="password")
 
+    if openai_key:            
+        ## Open AI llm settings
+        llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.1, streaming=True, callbacks=[ChatCallbackHandler()], api_key=openai_key)
+        memory = ConversationBufferMemory(
+            llm = llm,
+            max_token_limit=150,
+            return_messages=True,
 
+        )
+        ## Setting prompt with memory
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system",
+                """
+                You are the helpfule assistant which answer the question using only the following context. 
+                If you don't know the answer about the question, please just say you don't know.
 
-## Open AI llm settings
-llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.1, streaming=True, callbacks=[ChatCallbackHandler()], api_key=openai_key)
-
-memory = ConversationBufferMemory(
-    llm = llm,
-    max_token_limit=150,
-    return_messages=True,
-
-)
-
-## Setting prompt with memory
-prompt = ChatPromptTemplate.from_messages(
-    [
-        ("system",
-         """
-        You are the helpfule assistant which answer the question using only the following context. 
-        If you don't know the answer about the question, please just say you don't know.
-
-        ---
-        Context:{context}
-        """),
-        MessagesPlaceholder(variable_name="history"),
-        ("human", "{question}")
-    ]
-)
-
+                ---
+                Context:{context}
+                """),
+                MessagesPlaceholder(variable_name="history"),
+                ("human", "{question}")
+            ]
+        )
 
 def load_memory(_):
     return memory.load_memory_variables({})["history"]
