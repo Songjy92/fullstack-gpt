@@ -98,57 +98,69 @@ First, Upload your files on the sidebar.
 
 
 with st.sidebar:
-    file = st.file_uploader("Upload a .txt, .pdf or .docx file", type=["pdf", "txt", "docx"])
     st.markdown("## Please enter your OpenAI API Key")
     openai_key = st.text_input("OpenAI API Key", type="password")
-
-    if openai_key:            
-        ## Open AI llm settings
-        llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.1, streaming=True, callbacks=[ChatCallbackHandler()], api_key=openai_key)
-        memory = ConversationBufferMemory(
-            llm = llm,
-            max_token_limit=150,
-            return_messages=True,
-
-        )
-        ## Setting prompt with memory
-        prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system",
-                """
-                You are the helpfule assistant which answer the question using only the following context. 
-                If you don't know the answer about the question, please just say you don't know.
-
+    st.markdown("""
                 ---
-                Context:{context}
-                """),
-                MessagesPlaceholder(variable_name="history"),
-                ("human", "{question}")
-            ]
-        )
+                ## Please Upload your file""")
+
+    file = st.file_uploader("Upload a .txt, .pdf or .docx file", type=["pdf", "txt", "docx"])
+    
 
 def load_memory(_):
     return memory.load_memory_variables({})["history"]
 
+# 사용자가 openai key를 입력하면 openai 모델 instance 생성
+if openai_key:
+    ## Open AI llm settings
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.1, streaming=True, callbacks=[ChatCallbackHandler()], api_key=openai_key)
+    memory = ConversationBufferMemory(
+        llm = llm,
+        max_token_limit=150,
+        return_messages=True,
 
+    )
+    ## Setting prompt with memory
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system",
+            """
+            You are the helpfule assistant which answer the question using only the following context.
+            Please read the given context carefully and respond to the questions. 
+            If you don't know the answer about the question, please just say you don't know.
+
+            ---
+            Context:{context}
+            """),
+            MessagesPlaceholder(variable_name="history"),
+            ("human", "{question}")
+        ]
+    )   
+
+# 사용자가 openai key를 입력하고, 파일도 업로드 하면 임베딩 처리 시작
 if file:
-    retriever = embed_file(file)
-    send_message("I'm ready! Ask away!", "ai", save=False)
-    paint_history()
-    message = st.chat_input("Ask anything about your file...")
-    if message:
-        send_message(message, "human")
-        chain = (
-            {
-                "context" : retriever | RunnableLambda(format_docs),
-                "question" : RunnablePassthrough(),
-                "history": load_memory
-            }
-            | prompt 
-            | llm
-        )
-        with st.chat_message("ai"):
-            chain.invoke(message)
+    if not openai_key:
+        st.info("Please add your OpenAI API key to continue.")
+        st.stop()
         
+    else:
+        retriever = embed_file(file)
+        send_message("I'm ready! Ask away!", "ai", save=False)
+        paint_history()
+        message = st.chat_input("Ask anything about your file...")
+        if message:
+            send_message(message, "human")
+            chain = (
+                {
+                    "context" : retriever | RunnableLambda(format_docs),
+                    "question" : RunnablePassthrough(),
+                    "history": load_memory
+                }
+                | prompt 
+                | llm
+            )
+            with st.chat_message("ai"):
+                chain.invoke(message)
+            
 else:
     st.session_state["messages"] = []
