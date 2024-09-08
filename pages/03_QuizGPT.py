@@ -168,11 +168,10 @@ if openai_key:
     model="gpt-4o-mini",
     streaming=True,
     callbacks=[StreamingStdOutCallbackHandler()],
+    api_key=openai_key
     ).bind(
     function_call={"name": "create_quiz"},
-    functions=[function],
-    api_key=openai_key
-)
+    functions=[function],)
 
 
 if not docs:
