@@ -9,14 +9,8 @@ from langchain.chat_models import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
 from langchain.callbacks import StreamingStdOutCallbackHandler
 from langchain.retrievers import WikipediaRetriever
-from langchain.schema import BaseOutputParser, output_parser
+from langchain.schema.runnable import RunnablePassthrough
 
-class JsonOutputParser(BaseOutputParser):
-    def parse(self, text):
-        text = text.replace("```", "").replace("json","")
-        return json.loads(text)
-
-output_parser = JsonOutputParser()
 
 st.set_page_config(
     page_title="Quiz GPT",
@@ -25,12 +19,49 @@ st.set_page_config(
 
 st.title("QuizGPT")
 
-llm = ChatOpenAI(
-    temperature=0.1,
-    model="gpt-4o-mini",
-    streaming=True,
-    callbacks=[StreamingStdOutCallbackHandler()],
-)
+
+### function calling
+
+
+function = {
+    "name": "create_quiz",
+    "description": "function that takes a list of questions and answers and returns a quiz",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "questions": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "question": {
+                            "type": "string",
+                        },
+                        "answers": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "answer": {
+                                        "type": "string",
+                                    },
+                                    "correct": {
+                                        "type": "boolean",
+                                    },
+                                },
+                                "required": ["answer", "correct"],
+                            },
+                        },
+                    },
+                    "required": ["question", "answers"],
+                },
+            }
+        },
+        "required": ["questions"],
+    },
+}
+
+
 
 
 def format_docs(docs):
@@ -47,160 +78,18 @@ question_prompt = ChatPromptTemplate.from_messages(
         Based ONLY on the following context make 10 questions to test the user's knowledge about the text.
         
         Each question should have 4 answers, three of them must be incorrect and one should be correct.
-            
-        Use (o) to signal the correct answer.
-            
-        Question examples:
-            
-        Question: What is the color of the ocean?
-        Answers: Red|Yellow|Green|Blue(o)
-            
-        Question: What is the capital or Georgia?
-        Answers: Baku|Tbilisi(o)|Manila|Beirut
-            
-        Question: When was Avatar released?
-        Answers: 2007|2001|2009(o)|1998
-            
-        Question: Who was Julius Caesar?
-        Answers: A Roman Emperor(o)|Painter|Actor|Model
-            
-        Your turn!
-            
-        Context: {context}
+        
+        Based on the user's chosen difficulty level — easy, or hard — generate a question differently. 
+        If the difficulty is 'easy', create a simple and straightforward question that requires basic knowledge.
+        For 'hard', generate the most complex and challenging questions that demands in-depth knowledge or problem-solving skills.
+        
+        ---
+        Context: {context},
+        Difficulty: {difficulty},
         """,
                 )
             ]
         )
-
-question_chain = {"context": format_docs} | question_prompt | llm
-
-
-formatting_prompt = ChatPromptTemplate.from_messages(
-    [
-        (
-            "system",
-            """
-    You are a powerful formatting algorithm.
-     
-    You format exam questions into JSON format.
-    Answers with (o) are the correct ones.
-     
-    Example Input:
-
-    Question: What is the color of the ocean?
-    Answers: Red|Yellow|Green|Blue(o)
-         
-    Question: What is the capital or Georgia?
-    Answers: Baku|Tbilisi(o)|Manila|Beirut
-         
-    Question: When was Avatar released?
-    Answers: 2007|2001|2009(o)|1998
-         
-    Question: Who was Julius Caesar?
-    Answers: A Roman Emperor(o)|Painter|Actor|Model
-    
-     
-    Example Output:
-     
-    ```json
-    {{ "questions": [
-            {{
-                "question": "What is the color of the ocean?",
-                "answers": [
-                        {{
-                            "answer": "Red",
-                            "correct": false
-                        }},
-                        {{
-                            "answer": "Yellow",
-                            "correct": false
-                        }},
-                        {{
-                            "answer": "Green",
-                            "correct": false
-                        }},
-                        {{
-                            "answer": "Blue",
-                            "correct": true
-                        }},
-                ]
-            }},
-                        {{
-                "question": "What is the capital or Georgia?",
-                "answers": [
-                        {{
-                            "answer": "Baku",
-                            "correct": false
-                        }},
-                        {{
-                            "answer": "Tbilisi",
-                            "correct": true
-                        }},
-                        {{
-                            "answer": "Manila",
-                            "correct": false
-                        }},
-                        {{
-                            "answer": "Beirut",
-                            "correct": false
-                        }},
-                ]
-            }},
-                        {{
-                "question": "When was Avatar released?",
-                "answers": [
-                        {{
-                            "answer": "2007",
-                            "correct": false
-                        }},
-                        {{
-                            "answer": "2001",
-                            "correct": false
-                        }},
-                        {{
-                            "answer": "2009",
-                            "correct": true
-                        }},
-                        {{
-                            "answer": "1998",
-                            "correct": false
-                        }},
-                ]
-            }},
-            {{
-                "question": "Who was Julius Caesar?",
-                "answers": [
-                        {{
-                            "answer": "A Roman Emperor",
-                            "correct": true
-                        }},
-                        {{
-                            "answer": "Painter",
-                            "correct": false
-                        }},
-                        {{
-                            "answer": "Actor",
-                            "correct": false
-                        }},
-                        {{
-                            "answer": "Model",
-                            "correct": false
-                        }},
-                ]
-            }}
-        ]
-     }}
-    ```
-    Your turn!
-
-    Questions: {context}
-
-""",
-        )
-    ]
-)
-
-formatting_chain = formatting_prompt | llm
 
 
 @st.cache_data(show_spinner="Loading file...")
@@ -225,7 +114,34 @@ def split_file(file):
     return docs
 
 
+
+@st.cache_data(show_spinner="Making quiz...")
+def run_quiz_chain(_docs, topic, difficulty):
+    
+    question_chain = question_prompt | llm
+    response = question_chain.invoke({"context": format_docs(_docs), "difficulty":difficulty})
+    response = response.additional_kwargs["function_call"]["arguments"]
+    
+    return json.loads(response)
+
+
+@st.cache_data(show_spinner="Searching Wikipedia...")
+def wiki_search(term):
+    retriever = WikipediaRetriever(top_k_results=5)
+    docs = retriever.get_relevant_documents(term)
+    return docs
+
+## session_state for submit button
+if "disabled" not in st.session_state:
+    st.session_state.disabled = False
+
+
 with st.sidebar:
+    st.markdown("## Please enter your OpenAI API Key")
+    openai_key = st.text_input("OpenAI API Key", type="password")
+    st.markdown("---")
+    difficulty = st.radio("Choose a difficulty level.", ("Hard", "Easy"))
+    
     docs = None
     choice = st.selectbox(
         "Choose what you want to use for Quiz.",
@@ -244,26 +160,61 @@ with st.sidebar:
     else:
         topic = st.text_input("Search Wikipedia...")
         if topic:
-            retreiver = WikipediaRetriever(top_k_results=5)
-            with st.status("Searching Wikipedia..."):
-                docs = retreiver.get_relevant_documents(topic)
+            docs = wiki_search(topic)
+    
+if openai_key:
+    ## Open AI llm settings
+    llm = ChatOpenAI(temperature=0.1,
+    model="gpt-4o-mini",
+    streaming=True,
+    callbacks=[StreamingStdOutCallbackHandler()],
+    ).bind(
+    function_call={"name": "create_quiz"},
+    functions=[function],
+    api_key=openai_key
+)
 
 
 if not docs:
     st.markdown(
         """
-    Welcome to QuizGPT.
-                
-    I will make a quiz from Wikipedia articles or files you upload to test your knowledge and help you study.
-                
-    Get started by uploading a file or searching on Wikipedia in the sidebar.
+    ### Welcome to QuizGPT.
+    ##### I will make a quiz from Wikipedia articles or files you upload to test your knowledge and help you study.
+    
+    ##### Please Enter Your OpenAI API Key and Get started by uploading a file or searching on Wikipedia in the sidebar.
     """
     )
     
 else:
-    start = st.button("Generate Quiz")
+    if not openai_key:
+        st.error("Please add your OpenAI API key to continue.")
+        st.stop()
 
-    if start:
-        chain = {"context":question_chain} | formatting_chain | output_parser
-        response = chain.invoke(docs)
-        st.write(response)
+    response = run_quiz_chain(docs, topic if topic else file.name, difficulty)
+    score = 0
+    total_quiz_count = len(response["questions"])
+    with st.form("questions_form"):
+        for question in response["questions"]:
+            st.write(question["question"])
+            value = st.radio("Choose an answer",
+                [answer["answer"] for answer in question["answers"]],
+                index=None,
+            )
+            if {"answer": value, "correct": True} in question["answers"]:
+                st.success("Correct!")
+                score += 1
+            elif value is not None:
+                st.error("Wrong!")
+            st.markdown("---")
+        button = st.form_submit_button()
+        
+        if button:
+            if score == total_quiz_count:
+                st.balloons()
+                st.markdown("### 🎉 Congratulations! You got all the answers correct! 🎉")
+            else:
+                st.warning(f"You answered {score} out of {total_quiz_count} questions correctly! Keep up the great work, and don't stop challenging yourself! 🔥")
+
+
+            
+        
